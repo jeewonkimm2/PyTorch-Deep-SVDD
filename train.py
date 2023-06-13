@@ -103,9 +103,56 @@ class TrainerDeepSVDD:
             scheduler.step()
             print('Training Deep SVDD... Epoch: {}, Loss: {:.3f}'.format(
                    epoch, total_loss/len(self.train_loader)))
+            
         self.net = net
         self.c = c
-                
+          
+        # 마지막 레이어 t-SNE 시각화
 
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from sklearn.manifold import TSNE
+
+        # 마지막 레이어 데이터 정상/비정상
+        scores = []
+        labels = []
         
+        with torch.no_grad():
+            for x, y in self.train_loader:
+                x = x.float().to(self.device)
+                z = net(x)
+                score = torch.sum((z - c) ** 2, dim=32)
 
+                scores.append(score.detach().cpu())
+                labels.append(y.cpu())
+        labels, scores = torch.cat(labels).numpy(), torch.cat(scores).numpy()
+
+
+        # 마지막 레이어 임베딩
+        z_values = []
+            
+        with torch.no_grad():
+            for x, _ in self.train_loader:
+                x = x.float().to(self.device)
+                x = self.net.conv1(x)
+                x = self.net.pool(F.leaky_relu(self.net.bn1(x)))
+                x = self.net.conv2(x)
+                x = self.net.pool(F.leaky_relu(self.net.bn2(x)))
+                x = x.view(x.size(0), -1)
+                z = self.net.fc1(x)
+                z_values.append(z.detach().cpu().numpy())
+
+        z_values = np.concatenate(z_values, axis=0)
+               
+        # t-SNE 적용
+        tsne = TSNE(n_components=2, random_state=42)
+        z_tsne = tsne.fit_transform(z_values)
+
+        # 시각화
+        plt.scatter(z_tsne[:, 0], z_tsne[:, 1], color='blue', label='Normal',s=1, alpha=0.5)
+        plt.scatter(z_tsne[:, 0], z_tsne[:, 1], color='red', label='Anomaly',s=1, alpha=0.5)
+        plt.xlabel('t-SNE Dimension 1')
+        plt.ylabel('t-SNE Dimension 2')
+        plt.title('t-SNE Visualization')
+        plt.show()
+        
