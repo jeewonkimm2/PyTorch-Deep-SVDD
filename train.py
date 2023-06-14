@@ -103,56 +103,66 @@ class TrainerDeepSVDD:
             scheduler.step()
             print('Training Deep SVDD... Epoch: {}, Loss: {:.3f}'.format(
                    epoch, total_loss/len(self.train_loader)))
-            
         self.net = net
         self.c = c
-          
-        # 마지막 레이어 t-SNE 시각화
 
-        import numpy as np
+        # t-SNE 시각화
+
         import matplotlib.pyplot as plt
         from sklearn.manifold import TSNE
 
-        # 마지막 레이어 데이터 정상/비정상
-        scores = []
+        # Extract embeddings and labels
+        embeddings = []
         labels = []
-        
+        scores = []
+
         with torch.no_grad():
-            for x, y in self.train_loader:
+            for x, y in self.train_loader:                  # 여기서 실제 데이터를 load해야 정확한 label값을 가지고 올 수 있을 것 같은데
                 x = x.float().to(self.device)
                 z = net(x)
-                score = torch.sum((z - c) ** 2, dim=32)
+                score = torch.sum((z - c) ** 2, dim=1)
 
+                embeddings.extend(z.cpu().numpy())
                 scores.append(score.detach().cpu())
-                labels.append(y.cpu())
-        labels, scores = torch.cat(labels).numpy(), torch.cat(scores).numpy()
+                labels.extend(y.cpu().numpy())
 
+        embeddings = np.array(embeddings)
+        labels = np.array(labels)
+        scores = np.concatenate(scores) 
 
-        # 마지막 레이어 임베딩
-        z_values = []
-            
-        with torch.no_grad():
-            for x, _ in self.train_loader:
-                x = x.float().to(self.device)
-                x = self.net.conv1(x)
-                x = self.net.pool(F.leaky_relu(self.net.bn1(x)))
-                x = self.net.conv2(x)
-                x = self.net.pool(F.leaky_relu(self.net.bn2(x)))
-                x = x.view(x.size(0), -1)
-                z = self.net.fc1(x)
-                z_values.append(z.detach().cpu().numpy())
+        # Print labels, embeddings, and scores
+        for label, embedding, score in zip(labels, embeddings, scores):
+            print("Label:", label, "Embedding:", embedding, "Score:", score)
 
-        z_values = np.concatenate(z_values, axis=0)
-               
-        # t-SNE 적용
+        # Apply t-SNE to reduce dimensionality # 마지막 layer에 embedding값을 2차원으로 축소
         tsne = TSNE(n_components=2, random_state=42)
-        z_tsne = tsne.fit_transform(z_values)
+        embeddings_tsne = tsne.fit_transform(embeddings)
+        
+        # Get center coordinates
+        center = np.mean(embeddings_tsne, axis=0)
+        print("Center:", center)
 
-        # 시각화
-        plt.scatter(z_tsne[:, 0], z_tsne[:, 1], color='blue', label='Normal',s=1, alpha=0.5)
-        plt.scatter(z_tsne[:, 0], z_tsne[:, 1], color='red', label='Anomaly',s=1, alpha=0.5)
+        # Calculate distance percentiles
+        distances = np.linalg.norm(embeddings_tsne - center, axis=1)
+        percentiles = np.percentile(distances, [25, 50, 75])
+        c = np.max(distances ) - np.min(distances )
+        
+        # Plot t-SNE visualization with color-coded labels # 0: label은 normal, 1: label은 anomaly
+        plt.scatter(embeddings_tsne[labels == 0, 0], embeddings_tsne[labels == 0, 1], color='blue', label='Normal', s=1, alpha=0.5)
+        plt.scatter(embeddings_tsne[labels == 1, 0], embeddings_tsne[labels == 1, 1], color='red', label='Anomaly', s=1, alpha=0.5)
+        # scatter = plt.scatter(embeddings_tsne[:, 0], embeddings_tsne[:, 1], c=scores, cmap='cool', s=1, alpha=0.5)
+        
+        # Plot center and boundaries based on t-SNE coordinates
+        plt.scatter(center[0], center[1], color='green', marker='o', label='Center',s=1, alpha=0.5)
+        for percentile in percentiles:
+            boundary_radius = c * (percentile / 100)
+            boundary_circle = plt.Circle(center, boundary_radius, color='purple', fill=False)
+            plt.gca().add_patch(boundary_circle)
+
         plt.xlabel('t-SNE Dimension 1')
         plt.ylabel('t-SNE Dimension 2')
-        plt.title('t-SNE Visualization')
+        plt.title('t-SNE Visualization of Deep SVDD Embeddings')
+        plt.legend()
         plt.show()
+
         
