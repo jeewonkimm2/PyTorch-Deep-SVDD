@@ -102,67 +102,10 @@ class TrainerDeepSVDD:
                 total_loss += loss.item()
             scheduler.step()
             print('Training Deep SVDD... Epoch: {}, Loss: {:.3f}'.format(
-                   epoch, total_loss/len(self.train_loader)))
+                   epoch, total_loss/len(self.train_loader))) 
         self.net = net
-        self.c = c
+        self.c = c       
 
-        # t-SNE 시각화
 
-        import matplotlib.pyplot as plt
-        from sklearn.manifold import TSNE
 
-        # Extract embeddings and labels
-        embeddings = []
-        labels = []
-        scores = []
 
-        with torch.no_grad():
-            for x, y in self.train_loader:                  # 여기서 실제 데이터를 load해야 정확한 label값을 가지고 올 수 있을 것 같은데
-                x = x.float().to(self.device)
-                z = net(x)
-                score = torch.sum((z - c) ** 2, dim=1)
-
-                embeddings.extend(z.cpu().numpy())
-                scores.append(score.detach().cpu())
-                labels.extend(y.cpu().numpy())
-
-        embeddings = np.array(embeddings)
-        labels = np.array(labels)
-        scores = np.concatenate(scores) 
-
-        # Print labels, embeddings, and scores
-        for label, embedding, score in zip(labels, embeddings, scores):
-            print("Label:", label, "Embedding:", embedding, "Score:", score)
-
-        # Apply t-SNE to reduce dimensionality # 마지막 layer에 embedding값을 2차원으로 축소
-        tsne = TSNE(n_components=2, random_state=42)
-        embeddings_tsne = tsne.fit_transform(embeddings)
-        
-        # Get center coordinates
-        center = np.mean(embeddings_tsne, axis=0)
-        print("Center:", center)
-
-        # Calculate distance percentiles
-        distances = np.linalg.norm(embeddings_tsne - center, axis=1)
-        percentiles = np.percentile(distances, [25, 50, 75])
-        c = np.max(distances ) - np.min(distances )
-        
-        # Plot t-SNE visualization with color-coded labels # 0: label은 normal, 1: label은 anomaly
-        plt.scatter(embeddings_tsne[labels == 0, 0], embeddings_tsne[labels == 0, 1], color='blue', label='Normal', s=1, alpha=0.5)
-        plt.scatter(embeddings_tsne[labels == 1, 0], embeddings_tsne[labels == 1, 1], color='red', label='Anomaly', s=1, alpha=0.5)
-        # scatter = plt.scatter(embeddings_tsne[:, 0], embeddings_tsne[:, 1], c=scores, cmap='cool', s=1, alpha=0.5)
-        
-        # Plot center and boundaries based on t-SNE coordinates
-        plt.scatter(center[0], center[1], color='green', marker='o', label='Center',s=1, alpha=0.5)
-        for percentile in percentiles:
-            boundary_radius = c * (percentile / 100)
-            boundary_circle = plt.Circle(center, boundary_radius, color='purple', fill=False)
-            plt.gca().add_patch(boundary_circle)
-
-        plt.xlabel('t-SNE Dimension 1')
-        plt.ylabel('t-SNE Dimension 2')
-        plt.title('t-SNE Visualization of Deep SVDD Embeddings')
-        plt.legend()
-        plt.show()
-
-        
