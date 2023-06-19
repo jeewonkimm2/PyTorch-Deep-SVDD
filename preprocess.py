@@ -6,6 +6,7 @@ import numpy as np
 from torch.utils import data
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+import os
 
 from PIL import Image
 
@@ -72,3 +73,26 @@ def get_mnist(args, data_dir='./data/mnist/'):
     dataloader_test = DataLoader(data_test, batch_size=args.batch_size, 
                                   shuffle=True, num_workers=0)
     return dataloader_train, dataloader_test
+
+
+
+def get_mvtec(data_dir):
+    
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),  # 이미지 크기 조정
+        transforms.ToTensor(),  # 이미지를 텐서로 변환
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))  # 이미지 정규화
+    ])
+    
+    # train dataset
+    train_dataset = datasets.ImageFolder(os.path.join(data_dir, 'train'), transform=transform)
+    train_dataset.targets = [0 if 'good' in os.path.basename(path) else 1 for path, _ in train_dataset.imgs]
+
+    # test dataset
+    test_dataset = datasets.ImageFolder(os.path.join(data_dir, 'test'), transform=transform)
+    test_dataset.targets = [0 if 'good' in os.path.basename(path) else 1 for path, _ in test_dataset.imgs]
+
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=True)
+
+    return train_dataloader, test_dataloader
