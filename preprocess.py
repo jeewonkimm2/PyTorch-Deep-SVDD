@@ -79,10 +79,9 @@ def get_mnist(args, data_dir='./data/mnist/'):
 def get_mvtec(data_dir):
     
     transform = transforms.Compose([
-        transforms.Resize((28, 28)),  # 이미지 크기 조정
-        transforms.Grayscale(num_output_channels=1),  # 이미지를 1채널 흑백 이미지로 변환
+        transforms.Resize((224, 224)),  # 이미지 크기 조정
         transforms.ToTensor(),  # 이미지를 텐서로 변환
-        transforms.Normalize(mean=[0.485], std=[0.229])  # 이미지 정규화
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))  # 이미지 정규화
     ])
     
     # train dataset
