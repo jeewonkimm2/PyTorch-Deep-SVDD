@@ -156,7 +156,7 @@ class network(nn.Module):
 
     def forward(self, x):
         x = self.resnet(x)
-        return self.fc1(x)
+        return x           #
 
 
 class autoencoder(nn.Module):
