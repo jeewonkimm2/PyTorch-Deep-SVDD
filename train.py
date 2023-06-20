@@ -61,7 +61,8 @@ class TrainerDeepSVDD:
         with torch.no_grad():
             for x, _ in dataloader:
                 x = x.float().to(self.device)
-                z = model.encode(x)
+                # z = model.encode(x)
+                z = model.resnet(x)  # model.resnet을 사용하여 인코딩
                 z_.append(z.detach())
         z_ = torch.cat(z_)
         c = torch.mean(z_, dim=0)
