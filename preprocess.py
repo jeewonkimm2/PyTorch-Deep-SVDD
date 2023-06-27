@@ -11,6 +11,8 @@ import os
 from PIL import Image
 
 from utils.utils import global_contrast_normalization
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 
 class MNIST_loader(data.Dataset):
@@ -48,7 +50,16 @@ def get_mnist(args, data_dir='./data/mnist/'):
                 (-0.8280402650205075, 10.581538445782988),
                 (-0.7369959242164307, 10.697039838804978)]
 
-    transform = transforms.Compose([transforms.ToTensor(),
+    # transform = transforms.Compose([transforms.ToTensor(),
+    #                                 transforms.Lambda(lambda x: global_contrast_normalization(x)),
+    #                                 transforms.Normalize([min_max[args.normal_class][0]],
+    #                                                      [min_max[args.normal_class][1] \
+    #                                                      -min_max[args.normal_class][0]])])
+    
+    # pretrained 모델 사용 위해
+    transform = transforms.Compose([transforms.Grayscale(num_output_channels=3),
+                                    transforms.Resize((224, 224)),
+                                    transforms.ToTensor(),
                                     transforms.Lambda(lambda x: global_contrast_normalization(x)),
                                     transforms.Normalize([min_max[args.normal_class][0]],
                                                          [min_max[args.normal_class][1] \
@@ -76,23 +87,141 @@ def get_mnist(args, data_dir='./data/mnist/'):
 
 
 
+
+class MVTEC_loader(data.Dataset):
+    def __init__(self, data_dir, transform):
+        self.data_dir = data_dir
+        self.transform = transform
+
+        self.image_paths, self.labels = self._load_data()
+
+    def _load_data(self):
+        image_paths = []
+        labels = []
+        classes = os.listdir(self.data_dir)
+
+        for class_name in classes:
+
+            class_dir = os.path.join(self.data_dir, class_name)
+            
+            if os.path.isdir(class_dir):
+                for image_name in os.listdir(class_dir):
+                    image_path = os.path.join(class_dir, image_name)
+                    image_paths.append(image_path)
+                    labels.append(0 if class_name == 'good' else 1)
+
+        return image_paths, labels
+
+    def __getitem__(self, index):
+        image_path = self.image_paths[index]
+        label = self.labels[index]
+
+        image = Image.open(image_path).convert('RGB')
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label
+
+    def __len__(self):
+        return len(self.image_paths)
+    
+    
+
 def get_mvtec(data_dir):
-    
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),  # 이미지 크기 조정
-        transforms.ToTensor(),  # 이미지를 텐서로 변환
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))  # 이미지 정규화
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     ])
+
+    train_dataset = MVTEC_loader(os.path.join(data_dir, 'train'), transform=transform)
+    test_dataset = MVTEC_loader(os.path.join(data_dir, 'test'), transform=transform)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
+
+    # for path, target in zip(test_dataset.image_paths, test_dataset.labels):
+    #     print("class path, index : ", path, target)
     
-    # train dataset
-    train_dataset = datasets.ImageFolder(os.path.join(data_dir, 'train'), transform=transform)
-    train_dataset.targets = [0 if 'good' in os.path.basename(path) else 1 for path, _ in train_dataset.imgs]
+    
+    return train_dataloader, test_dataloader
 
-    # test dataset
-    test_dataset = datasets.ImageFolder(os.path.join(data_dir, 'test'), transform=transform)
-    test_dataset.targets = [0 if 'good' in os.path.basename(path) else 1 for path, _ in test_dataset.imgs]
 
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=True)
 
+class MVTEC_multi_loader(data.Dataset):
+    def __init__(self, data_dir, transform):
+        self.data_dir = data_dir
+        self.transform = transform
+
+        self.image_paths, self.labels = self._load_data()
+
+    def _load_data(self):
+        image_paths = []
+        labels = []
+        classes = os.listdir(self.data_dir)
+
+        for class_name in classes:
+            # print("class_name:", class_name)
+            class_dir = os.path.join(self.data_dir, class_name)
+            # print("class_dir:", class_dir)
+            if os.path.isdir(class_dir):
+                for image_name in os.listdir(class_dir):
+                    image_path = os.path.join(class_dir, image_name)
+                    image_paths.append(image_path)
+
+                    if 'bottle' in image_name:       label = 0 
+                    elif 'cable' in image_name:      label = 1
+                    elif 'capsule' in image_name:    label = 2
+                    elif 'carpet' in image_name:     label = 3
+                    elif 'grid' in image_name:       label = 4
+                    elif 'hazelnut' in image_name:   label = 5
+                    elif 'metal_nut' in image_name:  label = 6
+                    elif 'leather' in image_name:    label = 7
+                    elif 'pill' in image_name:       label = 8
+                    elif 'screw' in image_name:      label = 9
+                    elif 'tile' in image_name:       label = 10
+                    elif 'toothbrush' in image_name: label = 11
+                    elif 'transistor' in image_name: label = 12
+                    elif 'wood' in image_name:       label = 13
+                    else                     :       label = 14
+
+                    labels.append(label)  
+                    
+        # class 별 개수 count
+        from collections import Counter
+
+        label_counts = Counter(labels)
+        print(label_counts)
+        
+        return image_paths, labels
+
+    def __getitem__(self, index):
+        image_path = self.image_paths[index]
+        label = self.labels[index]
+
+        image = Image.open(image_path).convert('RGB')
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label
+
+    def __len__(self):
+        return len(self.image_paths)
+    
+def get_multi_mvtec(data_dir):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+    ])
+
+    train_dataset = MVTEC_multi_loader(os.path.join(data_dir, 'train'), transform=transform)
+    test_dataset = MVTEC_multi_loader(os.path.join(data_dir, 'test'), transform=transform)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
+
+    # for path, target in zip(test_dataset.image_paths, test_dataset.labels):
+    #     print("class path, index : ", path, target)
+    
     return train_dataloader, test_dataloader
